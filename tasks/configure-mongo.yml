@@ -1,0 +1,32 @@
+---
+# Configure mongo
+- lineinfile: dest=/etc/mongod.conf line="port={{mongo_port}}" regexp="^port(\s*)="
+  register: mongo_port_config
+- lineinfile: dest=/etc/mongod.conf line="bind_ip={{mongo_host}}" regexp="^bind_ip(\s*)="
+  register: mongo_ip_config
+- lineinfile: dest=/etc/mongod.conf line="replSet=rs0" regexp="^replSet(\s*)="
+  register: mongo_replSet_config
+# Increasing the oplog size make avoid the ES exceptions:
+# "River out of sync with oplog.rs collection"
+# https://github.com/richardwilly98/elasticsearch-river-mongodb/issues/233
+# However, it won't take effent until we do a fresh install.
+- lineinfile: dest=/etc/mongod.conf line="oplogSize=2048" regexp="^oplogSize(\s*)="
+  register: mongo_oplogSize_config
+  
+- name: Restart mongod
+  service: name=mongod state=restarted
+  when: mongo_port_config.changed or mongo_ip_config.changed or mongo_replSet_config.changed or mongo_oplogSize_config.changed
+
+- name: Waiting for mongod restart
+  wait_for: port={{river_mongo_port}} delay=2
+
+- name: Testing to see if the replica set has been configured
+  command: mongo --eval 'printjson(rs.conf())' --quiet
+  register: mongo_RsConf
+
+- name: Initializing replica set
+  command: mongo --eval 'rs.initiate({"_id":"rs0","members":[{"_id":1,"host":"{{mongo_host}}:{{mongo_port}}"}]})'
+  # It seems the handler is not notified when I run only this role by its tag.
+  notify: mongo restarted
+  # Running this seems to break the ES river, so it should only happen once.
+  when: mongo_RsConf.stdout == "null"

@@ -1,0 +1,55 @@
+---
+- include: configure-mongo.yml
+  when: river_configure_mongo
+
+- name: Waiting for elasticsearch to start (incase it hasn't already)
+  wait_for: port=9200 delay=1
+
+- name: Remove riverConfig file to trigger reindexing.
+  file: path=/etc/riverConfig.json state=absent
+  when: reindex is defined
+
+- name: Write river config
+  copy: content="{{river_config | to_json}}" dest=/etc/riverConfig.json mode=0755 force=yes
+  register: river_config_status
+
+- name: Write girder item mapping config
+  copy: content="{{river_elasticsearch_template | to_json}}" dest=/etc/river_elasticsearch_template.json mode=0755 force=yes
+  register: river_elasticsearch_template_status
+
+- name: Drop elasticsearch mongo river data
+  command: curl -XDELETE "localhost:9200/{{item}}"
+  when: river_config_status.changed or river_elasticsearch_template_status.changed
+  with_items:
+    - "_river/{{river_name}}"
+    - "{{river_elasticsearch_index_name}}"
+    - "_template/river_elasticsearch_template"
+
+- name: Add girder item template to elasticsearch
+  command: curl -XPUT "localhost:9200/_template/river_elasticsearch_template" -d @/etc/river_elasticsearch_template.json
+  when: river_config_status.changed or river_elasticsearch_template_status.changed
+
+- name: Creating girder item index
+  command: curl -XPUT 'localhost:9200/{{river_elasticsearch_index_name}}/'
+  when: river_config_status.changed or river_elasticsearch_template_status.changed
+
+- name: Configure mongodb elasticsearch river
+  command: curl -XPUT "localhost:9200/_river/{{river_name}}/_meta" -d @/etc/riverConfig.json
+  when: river_config_status.changed or river_elasticsearch_template_status.changed
+
+- name: Wait for some indexing to take place
+  pause: seconds=5
+
+- name: |
+    Get elasticsearch index status 
+    (On the first run the index will be incomplete because there is lots of bg processing left to do)
+  command: curl 'http://localhost:9200/{{river_elasticsearch_index_name}}/_count'
+  register: river_elasticsearch_index_count
+
+- name: Test elasticsearch index
+  ignore_errors: yes
+  assert:
+    that:
+      - "(river_elasticsearch_index_count.stdout|from_json).count > 0"
+
+- debug: msg="Count={{(river_elasticsearch_index_count.stdout|from_json).count}}"

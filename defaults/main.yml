@@ -1,0 +1,37 @@
+---
+river_configure_mongo: false
+river_mongo_host: localhost
+river_mongo_port: 27017
+river_mongo_db_name: river_db
+river_collection: river_collection
+river_elasticsearch_index_name: item_index
+river_elasticsearch_index_type: item
+river_name: mongo_river
+river_exclude_fields: []
+river_config:
+  type: mongodb
+  mongodb:
+    db: "{{river_mongo_db_name}}"
+    collection: "{{river_collection}}"
+    gridfs: "false"
+    servers:
+      - host: "{{river_mongo_host}}"
+        port: "{{river_mongo_port}}"
+    options:
+      # I believe drop_collection causes the ES index to drop if the mongodb is restored from a backup.
+      # However, I've encoutered problems when doing this.
+      drop_collection: "{{river_collection}}"
+      exclude_fields: "{{river_exclude_fields}}"
+  index:
+    name: "{{river_elasticsearch_index_name}}"
+    type: "{{river_elasticsearch_index_type}}"
+  logger:
+    river.mongodb: TRACE
+    rest.action: TRACE
+    org.elasticsearch.river.mongodb.MongoDBRiver: TRACE
+
+river_elasticsearch_template:
+  template: "{{river_elasticsearch_index_name}}"
+  mappings:
+    _default_:
+      dynamic_date_formats: "yyyy-MM-dd HH:mm:ss||yyyy-MM-dd HH:mm:ss.SSSSSS||date_optional_time||date_time"
