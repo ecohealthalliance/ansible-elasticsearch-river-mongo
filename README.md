@@ -5,15 +5,18 @@ from a mongodb collection to an elasticsearch index via the
 It is meant to be used in conjunction with this [Ansible Elasticsearch Playbook](https://github.com/Traackr/ansible-elasticsearch).
 
 ## Features
- * Automatically regenerate Elasticsearch index when its template or the river configuration changes.
+ * Configures the local mongo database to run as a replica set node.
+ * Automatically regenerates Elasticsearch river index when its template or the river configuration changes.
  * If the river breaks, you can force the elasticsearch index to be regenerated
    by adding the parameter `--extra-vars "reindex=true"` when you run your playbook.
 
 # Set-up Instructions:
 
+### 0. This assumes you have a mongo instance deployed
+
 ### 1. Include this role and ansible-elasticsearch in your playbook
 
-Checkout this project and ansible-elasticsearch as submodules under your playbook's roles directory:
+Checkout this project and ansible-elasticsearch as submodules under your ansible project's roles directory:
 
 ```
 $  cd roles
@@ -22,6 +25,25 @@ $  git submodule add {{this repository}} ./ansible-elasticsearch-river-mongo
 $  git submodule update --init
 $  git commit ./submodule -m "Added submodules"
 ```
+
+Then edit your main playbook file to contain these roles:
+
+```yaml
+---
+
+- hosts: all_nodes
+  user: ubuntu
+  sudo: yes
+
+  roles:
+    # ansible elasticsearch must come first
+    - ansible-elasticsearch
+    - ansible-elasticsearch-river-mongo
+
+  vars_files:
+    - vars/my-vars.yml
+```
+
 
 ### 2. Add the configuration variables required for ansible-elasticsearch and this role to group_vars/all.yml
 
@@ -50,8 +72,8 @@ elasticsearch_thread_pools:
 
 You will probably need to override these variables to point the river at your
 mongodb collection and specify what you want your elasticsearch index to be called.
-**Also, your mongo instance much be configured as a node in a replica set.**
-Setting river_configure_mongo to yes will configure your local mongo intance
+**Also, your mongo instance must be configured as a node in a replica set.**
+Setting river_configure_mongo to yes will configure your local mongo instance
 if you are running a compatible version.
 (We are using a version from an ubuntu apt package).
 
@@ -67,31 +89,14 @@ river_elasticsearch_index_type: item
 
 See the defaults folder for other river configuration variables available.
 
-### 3. Include the following roles in your master playbook
-Example playbook:
+### 3. Now you can run your playbook
 
-```
----
-
-- hosts: all_nodes
-  user: ubuntu
-  sudo: yes
-
-  roles:
-    # ansible elasticsearch must come first
-    - ansible-elasticsearch
-    - ansible-elasticsearch-river-mongo
-
-  vars_files:
-    - vars/my-vars.yml
-```
-
-### 4. Now you can run your playbook
-
-Check the log file at `/var/log/elasticsearch/elasticsearch.log` to see if anything went wrong.
 The playbook should print out the number of documents indexed
 so far as debug information, and an error if no documents
 were indexed.
+
+Check the log file at `/var/log/elasticsearch/elasticsearch.log`
+to see if anything went wrong with elasticsearch.
 
 Restarting elasticsearch tends to break the river.
 If this happens, use the reindex variable to create a new

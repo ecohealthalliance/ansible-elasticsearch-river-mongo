@@ -13,7 +13,7 @@
   copy: content="{{river_config | to_json}}" dest=/etc/riverConfig.json mode=0755 force=yes
   register: river_config_status
 
-- name: Write girder item mapping config
+- name: Write template for elasticsearch river index
   copy: content="{{river_elasticsearch_template | to_json}}" dest=/etc/river_elasticsearch_template.json mode=0755 force=yes
   register: river_elasticsearch_template_status
 
@@ -25,11 +25,11 @@
     - "{{river_elasticsearch_index_name}}"
     - "_template/river_elasticsearch_template"
 
-- name: Add girder item template to elasticsearch
+- name: Add template to elasticsearch
   command: curl -XPUT "localhost:9200/_template/river_elasticsearch_template" -d @/etc/river_elasticsearch_template.json
   when: river_config_status.changed or river_elasticsearch_template_status.changed
 
-- name: Creating girder item index
+- name: Creating elasticsearch index for river
   command: curl -XPUT 'localhost:9200/{{river_elasticsearch_index_name}}/'
   when: river_config_status.changed or river_elasticsearch_template_status.changed
 
